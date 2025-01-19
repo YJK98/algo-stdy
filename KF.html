@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Kalman Filters</title>
+<style type="text/css">
+* {
+	--theme-bg: #101820;
+	--content-mint: #C5FAD5;
+	--primary-heading-yellow: #FEE715;
+	--secondary-heading-coral: #FC766A;
+	--sub-heading-green: #2BAE66;
+	--sub-heading-pink: #ec729c;
+}
+::-moz-selection { /* Code for Firefox */
+/*  color: red;*/
+  background: #E2D1F966;
+}
+
+::selection {
+/*  color: red;*/
+  background: #E2D1F966;
+}
+body {
+	padding: 15px;
+	margin: 0;
+	font-family: 'architects daughter' !important;
+	background: var(--theme-bg);
+	color: var(--content-mint);
+	font-size: 20px;
+}
+
+h2 {
+    font-family: 'segoe print';
+    color: var(--primary-heading-yellow) !important;
+}
+
+h3 {
+    font-family: 'segoe print';
+    color: var(--secondary-heading-coral);
+}
+
+h4 {
+    font-family: 'dancing script', 'Cedarville Cursive', "Cedarville_Cursive variant0", Tofu;
+    color: var(--sub-heading-green);
+}
+
+div {
+	box-shadow: 0px 0px 25px 8px rgba(45,255,196,0.13);
+	padding: 6px;
+}
+div > span {
+	color: var(--sub-heading-pink);
+}
+
+th {
+    background-color: #4f0863;
+    color: white;
+}
+
+td {
+	padding: 3px;
+	margin: 0;
+}
+
+tr:nth-child(even) {
+    background-color: #1a1a1a;
+}
+
+tr {
+    background-color: #0d0d0d;
+}
+
+td:nth-child(1) {
+	text-align: center;
+}
+
+</style>
+</head>
+<body>
+<script>
+  MathJax = {
+    loader: {
+      load: [
+        'input/tex-base', '[tex]/newcommand', '[tex]/action',
+        'output/chtml'
+      ]
+    },
+    tex: {
+      inlineMath: [['$', '$'], ['\\(', '\\)']],
+      packages: ['base', 'newcommand', 'action']
+    }
+  };
+  </script>
+  <script id="MathJax-script" async src="es5/startup.js"></script><h2>Notations</h2>
+<p>$x_k$ State Vector</p>
+<p>$u_k$ Control Input Vector</p>
+<p>$w_k$ Process Model Noise Vector</p>
+<p>$v_k$ Measurement Noise Vector</p>
+
+<p>$F_k$ State Transition Matrix</p>
+<p>$G_k$ Control Input Matrix</p>
+<p>$H_k$ Measurement Matrix</p>
+<p>$L_k$ Process Model Noise Sensitivity Matrix</p>
+<p>$M_k$ Measurement Model Noise Sensitivity Matrix</p>
+
+
+<h2>Assumptions</h2>
+<h3><strong>Gaussian</strong> Distribution with <strong>Zero mean</strong> and given <strong>Covariance matrix</strong></h3>
+<p>$w_k \sim N(0, Q_k)$</p>
+<p>$v_k \sim N(0, R_k)$</p>
+<h3>Not correlated with time</h3>
+<p>$E(w_k w_j^T) = Q_k δ_{k-j}$</p>
+<p>$E(v_k v_j^T) = R_k δ_{k-j}$</p>
+
+<h3>Process Noise and Measurement Noise are independent</h3>
+<p>$E(w_k v_j^T) = 0$</p>
+
+<h4>Our goal🎯 is to estimate🔎 the state📄 of the system based on our knowledge🧠 of the dynamics🧨 and the availability🙋‍♀️ of noisy measurements📏 ($z_1, z_2, ..., z_k$)</h4>
+
+<h2>Estimation Terms</h2>
+<p>True State (Unknown) $x_k$</p>
+<p>Estimated State $\hat{x}$</p>
+<p>Estimation Error $\tilde{x}_k = x_k - \hat{x}_k$</p>
+
+<p>a priori (Estimated) State $\hat{x}_{k}^{-} = \hat{x}_{k|k-1} = E[x_k|Z^{k-1}] = E(x_k|z_1, z_2, ..., z_k)$</p>
+<p>a posteriori (Estimated) State $\hat{x}_{k}^{+} = \hat{x}_{k|k} = E[x_k|Z^k] = E(x_k|z_1, z_2, ..., z_{k-1})$</p>
+<p>Initial State $\hat{x}_{0}^{+} = E(x_0)$</p>
+
+<p>a priori Covariance $P_{k}^{-} = P_{k|k-1} = E[\tilde{x}_{k|k-1}\tilde{x}_{k|k-1}^T|Z^{k-1}]$</p>
+<p>a posteriori Covariance $P_{k}^{+} = P_{k|k} = E[\tilde{x}_{k|k}\tilde{x}_{k|k}^T|Z^k]$</p>
+
+<main style="overflow-x: auto; overflow-y: hidden;">
+<table>
+	<tr><th>Assumptions</th><th>Linear Kalman Filter</th><th>Extended Kalman Filter</th><th>Unscented Kalman Filter</th></tr>
+	<tr>
+		<td>Definition</td>
+		<td></td>
+		<td>
+			EKF is a <strong>recursive</strong> estimator (predictor-corrector) that solves the linear quadratic estimation problem using Minimum Mean Squared Error (MSSE) method.<br/>
+			State Estimate for time i given all measurements upto time j <br/>
+			$\hat{x}_{i|j} = arg min_{\hat{x}_{i|j} ∈ Rⁿ}E[(x_i - )(x_i - )^T|z_1,...,z_j]$
+		</td>
+		<td>
+			UKF is a <strong>recursive</strong> estimator (predictor-corrector) that solves the linear quadratic estimation problem using Minimum Mean Squared Error (MSSE) method. The filter implementation uses the Unscented Transform to approximate the non-linear probability distribution transformations. <br/>
+			$\hat{x}_{i|j} = arg min_{\hat{x}_{i|j} ∈ Rⁿ}E[(x_i - \hat{x}_{i|j})(x_i - \hat{x}_{i|j})^T|z_1,...,z_j]$
+		</td>
+	</tr>
+	<tr>
+		<td>Operation</td>
+		<td></td>
+		<td>
+			Transformation of a Gaussian Distribution using a Linear Approximation (i.e., Jacobian) of the Non-Linear function.
+
+		</td>
+		<td>
+			Calculates the Non-Linear Transform of the key sample points (Sigma points), then fits a Gaussian distribution to the transformed points.<br/>
+			Tranform Sigma Points<br/>
+			Fit Gaussian
+		</td>
+	</tr>
+	<tr>
+		<td>Process model</td>
+		<td>
+			Linear Dynamics <br/>
+			$x_k = F_{k-1}x_{k-1} + G_{k-1}v_{k-1} + L_{k-1}w_{k-1}$</td>
+		<td>
+			Non-Linear Dynamics <br/>
+			$x_k = f(x_{k-1}, v_{k-1}, w_{k-1})$</td>
+		<td>
+			Non-Linear Dynamics <br/>
+			$x_k = f(x_{k-1}, u_{k}, w_{k})$</td>
+		</td>
+	</tr>
+	<tr>
+		<td>Measurement Model</td>
+		<td>
+			Linear Measurement <br/>
+			$z_k = H_kx_k + M_kv_k$
+		</td>
+		<td>
+			Non-Linear Measuremnt <br/>
+			$z_k = h(x_k, v_k)$
+		</td>
+		<td>
+			Non-Linear Measuremnt <br/>
+			$z_k = h(x_k, v_k)$
+		</td>
+	</tr>
+	<tr>
+		<td>Prediction/time-update Step</td>
+		<td>
+			<h4>State Prediction</h4>
+			$\hat{x}^-_k = f(\hat{x}^+_{k-1}, u_k, 0)$
+
+			<h4>Covariance Prediction</h4>
+		</td>
+		<td>
+			<h4>State Prediction</h4>
+			$\hat{x}^-_k = f(\hat{x}^+_{k-1}, u_k, 0)$ <br/>
+			<div>
+				<span>a posteriori state for $k-1$</span><br/>
+				$\hat{x}^+_{k-1} = \hat{x}_{k-1|k-1}$ <br/>
+				$E[x_{k-1}|Z^{k-1}]$ <br/>
+			</div>
+			↓<br/>
+			$f(∙)$ <br/>
+			↓<br/>
+			<div>
+			<span>a priori state for $k$</span><br/>
+			$\hat{x}^-_{k-1} = \hat{x}_{k|k-1}$ <br/>
+			$E[x_k|Z^{k-1}]$
+			</div>
+			<h4>Covariance Prediction</h4>
+			$P^-_k = ∇f_xP^+_{k-1}∇f_x^T + ∇f_wQ^+_k∇f_w^T$ <br/>
+			Jacobian Matrices are:<br/>
+			$∇f_x = \frac{∂f}{∂x}|_{x = \hat{x}^+_{k-1}}$<br/>
+			[Like the F matrix in LKF]
+			$∇f_w = \frac{∂f}{∂w}|_{x = \hat{x}^+_{k-1}}$<br/>
+			[Like the L matrix in LKF]<br/>
+			<div>
+				<span>a posteriori state for $k-1$</span><br/>
+				$P^+_{k-1} = P_{k-1|k-1}$ <br/>
+				$E[(x_{k-1} - \hat{x}^+_{k-1})(x_{k-1} - \hat{x}^+_{k-1})^T|Z^{k-1}]$ <br/>
+			</div>
+			↓<br/>
+			$∇f(∙)$ <br/>
+			↓<br/>
+			<div>
+				<span>a priori state for $k$</span><br/>
+				$P^-_k = P_{k|k-1}$ <br/>
+				$E[(x_k - \hat{x}^-_k)(x_k - \hat{x}^-_k)^T|Z^{k-1}]$
+			</div>
+		</td>
+		<td>
+			<h4>case 1: Additive Process model Noise</h4>
+					$ x_k = f(x_{k-1}, u_k) + w_k $ <br/>[straight forward implementation of the UT]
+			
+			<br/>
+			<h4>case 2: General (Non-Additive) Process model Noise</h4>
+					$ x_k = f(x_{k-1}, u_k, w_k) $ <br/>[Augment the state with process model noise]
+		</td>
+	</tr>
+	<tr>
+		<td>Correction Step</td>
+		<td>
+			<h4>Measurement Innovation (State)</h4>
+			$v_k = z_k - H_k\hat{x}^-_k$
+			<h4>Measurement Innovation (Covariance)</h4>
+			$S_k = H_kP^-_kH^T_k + R_k$
+		</td>
+		<td>
+			<h4>Measurement Innovation (State)</h4>
+			We can predict the measurement $\hat{z}_k$ based on the current a priori state estimate $\hat{x}^-_k$ using the non-linear mesurement function:<br/>
+			$\hat{z}_k = h(\hat{x}^-_k, 0)$<br/>
+			We will define the innovation vector $v_k$ to be difference between predicted measurement and $\hat{z}_k$ and the true measurement $z_k$ such that:
+			$v_k = z_k - h(\hat{x}^-_k, 0) = z_k - \hat{z}_k$<br/> 
+
+			<h4>Measurement Innovation (Covariance)</h4>
+			The innovation covariance matrix $S_k$ is defined as:
+			$S_k = E[v_kv_k^T]$ <br/>
+			This term can be calculated using:<br/>
+			$S_k = ∇h_xP^-_k∇h_x^T + ∇h_vR_k∇h_v^T$ <br/>
+			Jacobian Matrices are:<br/>
+			$∇h_x = \frac{∂h}{∂x}|_{x = \hat{x}^+_k}$<br/>
+			$∇h_v = \frac{∂h}{∂v}|_{x = \hat{x}^+_k}$<br/>
+		</td>
+		<td></td>
+	</tr>
+	<tr>
+		<td>Properties</td>
+		<td>
+			<ul>
+				<li>Best Linear Estimator</li>
+				<li>Stable for any Initail conditions🧂</li>
+				<li>Stable for any Perturbations😎</li>
+			</ul>
+		</td>
+		<td>
+			<ul>
+				<li>Not the Best Estimator</li>
+				<li>No guarantees on stability🌠, can diverge</li>
+				<li>Estimated state must be close to the true state or the filter can diverge📈 (Error can't grow too large, initial conditions must be close to the truth)</li>
+				<li>Despite these limitations, the EKF has shown itself to be very capability in the real world🌍.<br/>Especially for navigation🧭 or kinematic🚅 models.</li>
+			</ul>
+		</td>
+		<td></td>
+	</tr>
+</table>
+</main>
+
+<h2>Particle Filter</h2>
+<h3>State-Space Models</h3>
+$x_k = f(x_{k-1}, u_{k-1}, w_{k-1})$<br/>
+$z_k = g(x_k, v_k)$<br/>
+$x_k ∈ R^n$ State vector at a (discrete) time step $k$ <br/>
+$u_{k-1} ∈ R^{m_1}$ control input vector at the time step $k-1$ <br/>
+$w_{k-1} ∈ R^{m_2}$ process disturbance vector (process noise vector) at the time step $k-1$ <br/>
+$z_k ∈ R^r$ observed output vector at the time step $k$ <br/>
+$v_k ∈ R^r$ measurement noise vector at the time step $k$ <br/>
+In the most general case, $f(∙), g(∙)$ are non-linear functions <br/>
+
+<h3>Facts✅!</h3>
+<ul>
+	<li>The state of the system $x_k$ is usually not completely observable. We can only observe or sense the output of the system denoted by $z_k$. The main purpose of state estimators is to estimate the state of the system $x_k$ by using the measurements of $z_k$.</li>
+	<li>The vector $w_{k-1}$ is the process disturbance vector. This vector is also called the process noise vector. The exact value of this vector is usually not known (unless we use a method to estimate its value). However, we can model the statistics of this vector. For example, we can model or estimate the mean and covariance matrix of the distribution describing the statistics of this vector. In practice, this vector can for example mathematically model stochastic state disturbances affecting the dynamics. Some researchers use this vector to take into account model uncertainties.</li>
+	<li>The vector $v_k$ is the measurement noise vector. In practice, the measurement process or sensors introduce noise in the observed variables. This vector is used to mathematically model the sensor or measurement process noise. Similar to the process disturbance vector, we do not know the exact value of the measurement noise vector. Instead, we can either model or estimate the statistical description of this vector. For example, we can model or estimate the mean and the covariance matrix of the statistical distribution of this vector.</li>
+	<li>The vector $u_{k-1}$ is the control input vector. We assume that the control input vector is perfectly known. This is because the control algorithm computes the numerical value of the control input vector. Here, there is an additional complication that we will simply ignore in this tutorial. Namely, the control input vector $u_{k-1}$ is computed by using the information from states and outputs at the past time steps. That is, this input is not independent of the statistics of the past states and outputs. This fact creates additional complications when deriving the estimation algorithms and when analyzing their behavior. For simplicity, we completely ignore this fact for now.</li>
+</ul>
+
+For clarity and not to blur the main ideas of particle filters with too many details of complex nonlinear functions, in this tutorial and other parts of the tutorial series, we assume that the model is linear and that it has the following form
+
+$$x_k =Ax_{k-1} + Bu_{k-1} + w_{k-1}$$
+$$z_k = Cx_k + v_k$$
+
+where A, B, and C are state, input, and output system matrices.
+
+<h3>Statistics and State Space Models</h3>
+
+<ol>
+	<li>
+		The process disturbance vector $w_k$ is a Gaussian random vector. That is, the vector $w_k$ is distributed according to the Gaussian distribution which is also known as the normal distribution. We assume that the mean of $w_k$ is zero and that the covariance matrix is $Q$. In the general case, the mathematical notation for Gaussian random vectors is
+
+		$$w_k \sim \mathcal{N}(0, Q)$$
+
+
+		where this notation means that the vector $w_k$ is distributed according to the normal distribution with the mean of 0 and the covariance matrix of $Q$. In the general case, a vector with the mean of $\mu$ and the covariance matrix of $C_m$ is said to be distributed according to $\mathcal{N}(\mu, C_m)$. That is, the first entry in the notation $\mathcal{N}(\cdot ,\cdot)$ is the mean of the vector, and the second entry is the covariance matrix.
+	</li>
+	<li>
+		The measurement noise vector $v_k$ is a Gaussian random vector. We assume that the mean of $v_k$ is zero and that the covariance matrix is $R$. That is,
+
+		$$v_k \sim \mathcal{N}(0, R)$$
+	</li>
+</ol>
+
+We introduced these assumptions to simplify the explanation of particle filters. However, particle filters can be used when random vectors have non-Gaussian probability distributions. <br/>
+
+
+
+</body>
+</html>
